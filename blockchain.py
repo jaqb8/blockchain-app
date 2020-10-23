@@ -1,8 +1,9 @@
-import functools
+from functools import wraps
 
 
 class blockchain():
 
+    MINING_REWARD = 10
     OWNER = 'jaqb'
     GENESIS_BLOCK = {
         'previous_hash': '',
@@ -15,11 +16,11 @@ class blockchain():
         self.participants = set([self.OWNER])
 
     def print_wrapper(func):
-        @functools.wraps(func)
+        @wraps(func)
         def wrapper(self, *args, **kwargs):
-            print('-' * 20)
+            print('-' * 30)
             func(self, *args, **kwargs)
-            print('-' * 20)
+            print('-' * 30)
         return wrapper
 
     @print_wrapper
@@ -43,19 +44,23 @@ class blockchain():
         tx_sender = [[tx['amount'] for tx in block['transactions']
                       if tx['sender'] == participant]
                      for block in self.blockchain]
+        open_tx_sender = [tx['amount'] for tx in self.open_transactions
+                          if tx['sender'] == participant]
+        tx_sender.append(open_tx_sender)
         tx_recipient = [[tx['amount'] for tx in block['transactions']
                          if tx['recipient'] == participant]
                         for block in self.blockchain]
 
-        sender_amount = sum([amount[0] for amount in tx_sender if amount])
-        recipient_amount = sum([amount[0]
-                                for amount in tx_recipient if amount])
+        sender_amount = sum([item for sublist in tx_sender
+                             for item in sublist])
+        recipient_amount = sum([item for sublist in tx_recipient
+                                for item in sublist])
         return recipient_amount - sender_amount
 
     @print_wrapper
     def print_balance(self, participant):
-        print(f'Balance of user {participant}:')
-        print(self._get_balance(participant))
+        print('Balance of user {}: {:6.2f}'
+              .format(participant, self._get_balance(participant)))
 
     def add_transaction(self, recipient, amount=1.0, sender=OWNER):
         new_transaction = {
@@ -63,9 +68,12 @@ class blockchain():
             'recipient': recipient,
             'amount': amount
         }
-        self.open_transactions.append(new_transaction)
-        self.participants.add(sender)
-        self.participants.add(recipient)
+        if self._verify_transaction(new_transaction):
+            self.open_transactions.append(new_transaction)
+            self.participants.add(sender)
+            self.participants.add(recipient)
+            return True
+        return False
 
     def clear_open_transactions(self):
         self.open_transactions = list()
@@ -76,9 +84,16 @@ class blockchain():
     def mine_block(self):
         last_block = self.get_last_blockchain_item()
         hashed_block = self.hash_block(last_block)
+        reward_transaction = {
+            'sender': 'MINING',
+            'recipient': self.OWNER,
+            'amount': self.MINING_REWARD
+        }
+        open_transactions_copy = self.open_transactions[:]
+        open_transactions_copy.append(reward_transaction)
         block = {
             'previous_hash': hashed_block,
-            'transactions': self.open_transactions
+            'transactions': open_transactions_copy
         }
         self.blockchain.append(block)
         self.clear_open_transactions()
@@ -89,6 +104,14 @@ class blockchain():
                     != self.hash_block(self.blockchain[idx - 1]):
                 return False
         return True
+
+    def verify_open_transactions(self):
+        return all([self._verify_transaction(tx)
+                    for tx in self.open_transactions])
+
+    def _verify_transaction(self, transaction):
+        sender_balance = self._get_balance(transaction['sender'])
+        return sender_balance >= transaction['amount']
 
     def get_transaction_info(self):
         tx_recipient = input('Enter the recipient of the transaction: ')
@@ -108,12 +131,16 @@ while wait_for_input:
     print('2: Mine a new block')
     print('3: Output the blockchain')
     print('4: Output participants')
+    print('5: Check transactions validity')
     print('h: Manipulate the chain')
     print('q: Quit')
     user_choice = bc.get_user_choice()
     if user_choice == '1':
         tx_recipient, tx_amount = bc.get_transaction_info()
-        bc.add_transaction(tx_recipient, tx_amount)
+        if bc.add_transaction(tx_recipient, tx_amount):
+            print('Transaction added.')
+        else:
+            print('Transaction failed.')
         print(bc.open_transactions)
     elif user_choice == '2':
         bc.mine_block()
@@ -121,6 +148,12 @@ while wait_for_input:
         bc.print_blockchain()
     elif user_choice == '4':
         bc.output_participants()
+    elif user_choice == '5':
+        if bc.verify_open_transactions():
+            print('All open transactions are valid.')
+        else:
+            print('There is at least one invalid '
+                  'transaction in open transactions.')
     elif user_choice == 'h':
         if bc.blockchain:
             bc.blockchain[0] = {
