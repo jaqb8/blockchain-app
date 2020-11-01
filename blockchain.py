@@ -1,4 +1,6 @@
 from functools import wraps
+from collections import OrderedDict
+from hash_utils import hash_block, hash_string_sha256
 
 
 class blockchain():
@@ -7,7 +9,8 @@ class blockchain():
     OWNER = 'jaqb'
     GENESIS_BLOCK = {
         'previous_hash': '',
-        'transactions': list()
+        'transactions': list(),
+        'proof': 50
     }
 
     def __init__(self):
@@ -63,11 +66,11 @@ class blockchain():
               .format(participant, self._get_balance(participant)))
 
     def add_transaction(self, recipient, amount=1.0, sender=OWNER):
-        new_transaction = {
-            'sender': sender,
-            'recipient': recipient,
-            'amount': amount
-        }
+        new_transaction = OrderedDict([
+            ('sender', sender),
+            ('recipient', recipient),
+            ('amount', amount)
+        ])
         if self._verify_transaction(new_transaction):
             self.open_transactions.append(new_transaction)
             self.participants.add(sender)
@@ -78,30 +81,49 @@ class blockchain():
     def clear_open_transactions(self):
         self.open_transactions = list()
 
-    def hash_block(self, block):
-        return '-'.join([str(value) for _, value in block.items()])
+    def valid_proof(self, transactions, last_hash, proof):
+        guess = (str(transactions) + str(last_hash) + str(proof)).encode()
+        guess_hash = hash_string_sha256(guess)
+        print(guess_hash)
+        return guess_hash[0:2] == '00'
+
+    def proof_of_work(self):
+        last_block = self.get_last_blockchain_item()
+        last_hash = hash_block(last_block)
+        proof = 0
+        while not self.valid_proof(self.open_transactions, last_hash, proof):
+            proof += 1
+        return proof
 
     def mine_block(self):
         last_block = self.get_last_blockchain_item()
-        hashed_block = self.hash_block(last_block)
-        reward_transaction = {
-            'sender': 'MINING',
-            'recipient': self.OWNER,
-            'amount': self.MINING_REWARD
-        }
+        hashed_block = hash_block(last_block)
+        proof = self.proof_of_work()
+        reward_transaction = OrderedDict([
+            ('sender', 'MINING'),
+            ('recipient', self.OWNER),
+            ('amount', self.MINING_REWARD)
+        ])
         open_transactions_copy = self.open_transactions[:]
         open_transactions_copy.append(reward_transaction)
         block = {
             'previous_hash': hashed_block,
-            'transactions': open_transactions_copy
+            'transactions': open_transactions_copy,
+            'proof': proof
         }
         self.blockchain.append(block)
         self.clear_open_transactions()
 
     def verify_chain(self):
         for idx, block in enumerate(self.blockchain):
-            if idx != 0 and block['previous_hash'] \
-                    != self.hash_block(self.blockchain[idx - 1]):
+            if idx == 0:
+                continue
+            if block['previous_hash'] \
+                    != hash_block(self.blockchain[idx - 1]):
+                return False
+            if not self.valid_proof(block['transactions'][:-1],
+                                    block['previous_hash'], block['proof']):
+                print('Proof of work is invalid.')
                 return False
         return True
 
