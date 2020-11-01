@@ -3,7 +3,7 @@ from collections import OrderedDict
 from hash_utils import hash_block, hash_string_sha256
 
 
-class blockchain():
+class Blockchain():
 
     MINING_REWARD = 10
     OWNER = 'jaqb'
@@ -144,7 +144,7 @@ class blockchain():
         return input('Your choice: ')
 
 
-bc = blockchain()
+bc = Blockchain()
 wait_for_input = True
 
 while wait_for_input:
