@@ -2,7 +2,6 @@ from functools import wraps
 from collections import OrderedDict
 from hash_utils import hash_block, hash_string_sha256
 import json
-import os
 
 
 class Blockchain():
@@ -19,8 +18,7 @@ class Blockchain():
         self.blockchain = [self.GENESIS_BLOCK]
         self.open_transactions = list()
         self.participants = set([self.OWNER])
-        if os.path.isfile('./blockchain.txt'):
-            self.load_data()
+        self.load_data()
 
     def print_wrapper(func):
         @wraps(func)
@@ -43,30 +41,37 @@ class Blockchain():
             print(participant)
 
     def load_data(self):
-        with open('blockchain.txt', 'r') as input_file:
-            file_content = input_file.readlines()
-            self.blockchain = json.loads(file_content[0].strip('\n'))
-            self.blockchain = [{
-                'previous_hash': block['previous_hash'],
-                'proof': block['proof'],
-                'transactions': [OrderedDict([
+        try:
+            with open('blockchain.txt', 'r') as input_file:
+                file_content = input_file.readlines()
+                self.blockchain = json.loads(file_content[0].strip('\n'))
+                self.blockchain = [{
+                    'previous_hash': block['previous_hash'],
+                    'proof': block['proof'],
+                    'transactions': [OrderedDict([
+                        ('sender', tx['sender']),
+                        ('recipient', tx['recipient']),
+                        ('amount', tx['amount'])
+                    ]) for tx in block['transactions']]
+                } for block in self.blockchain]
+                self.open_transactions = json \
+                    .loads(file_content[1].strip('\n'))
+                self.open_transactions = [OrderedDict([
                     ('sender', tx['sender']),
                     ('recipient', tx['recipient']),
                     ('amount', tx['amount'])
-                ]) for tx in block['transactions']]
-            } for block in self.blockchain]
-            self.open_transactions = json.loads(file_content[1].strip('\n'))
-            self.open_transactions = [OrderedDict([
-                ('sender', tx['sender']),
-                ('recipient', tx['recipient']),
-                ('amount', tx['amount'])
-            ]) for tx in self.open_transactions]
+                ]) for tx in self.open_transactions]
+        except IOError:
+            print('Blockchain file not found.')
 
     def save_data(self):
-        with open('blockchain.txt', 'w') as output_file:
-            output_file.write(json.dumps(self.blockchain))
-            output_file.write('\n')
-            output_file.write(json.dumps(self.open_transactions))
+        try:
+            with open('blockchain.txt', 'w') as output_file:
+                output_file.write(json.dumps(self.blockchain))
+                output_file.write('\n')
+                output_file.write(json.dumps(self.open_transactions))
+        except IOError:
+            print('Saving failed!')
 
     def get_last_blockchain_item(self):
         if self.blockchain:
