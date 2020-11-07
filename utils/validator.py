@@ -1,4 +1,4 @@
-from hash_utils import hash_block, hash_string_sha256
+from .hash_utils import hash_block, hash_string_sha256
 
 
 class Validator:

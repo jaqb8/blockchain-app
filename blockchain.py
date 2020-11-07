@@ -1,8 +1,8 @@
 import json
-from hash_utils import hash_block
+from utils.hash_utils import hash_block
 from block import Block
 from transaction import Transaction
-from validator import Validator
+from utils.validator import Validator
 
 
 class Blockchain():
@@ -99,6 +99,8 @@ class Blockchain():
         return recipient_amount - sender_amount
 
     def add_transaction(self, recipient, sender, amount=1.0):
+        if self.hosting_node is None:
+            return False
         new_transaction = Transaction(sender, recipient, amount)
         if Validator.verify_transaction(new_transaction,
                                         self.get_balance):
@@ -120,6 +122,8 @@ class Blockchain():
         return proof
 
     def mine_block(self):
+        if self.hosting_node is None:
+            return False
         last_block = self.get_last_blockchain_item()
         hashed_block = hash_block(last_block)
         proof = self.proof_of_work()
@@ -136,3 +140,4 @@ class Blockchain():
         self.__chain.append(block)
         self.clear_open_transactions()
         self.save_data()
+        return True

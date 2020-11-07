@@ -1,13 +1,13 @@
 from functools import wraps
 from blockchain import Blockchain
-from uuid import uuid4
-from validator import Validator
+from utils.validator import Validator
+from wallet import Wallet
 
 
 class Node:
     def __init__(self):
-        self.node_id = str(uuid4())
-        self.blockchain = Blockchain(self.node_id)
+        self.wallet = Wallet()
+        self.create_wallet()
 
     def print_wrapper(func):
         @wraps(func)
@@ -26,7 +26,7 @@ class Node:
     @print_wrapper
     def print_balance(self):
         print('Balance of user {}: {:6.2f}'
-              .format(self.node_id, self.blockchain.get_balance()))
+              .format(self.wallet.public_key, self.blockchain.get_balance()))
 
     def get_transaction_info(self):
         tx_recipient = input('Enter the recipient of the transaction: ')
@@ -35,6 +35,17 @@ class Node:
 
     def get_user_choice(self):
         return input('Your choice: ')
+
+    def initialize_blockchain(self, hosting_node):
+        self.blockchain = Blockchain(hosting_node)
+
+    def create_wallet(self):
+        self.wallet.create_keys()
+        self.initialize_blockchain(self.wallet.public_key)
+
+    def load_wallet(self):
+        self.wallet.load_keys()
+        self.initialize_blockchain(self.wallet.public_key)
 
     def listen_for_input(self):
         wait_for_input = True
@@ -45,18 +56,23 @@ class Node:
             print('2: Mine a new block')
             print('3: Output the blockchain')
             print('4: Check transactions validity')
+            print('5: Create wallet')
+            print('6: Load wallet')
+            print('7: Save keys')
             print('q: Quit')
             user_choice = self.get_user_choice()
             if user_choice == '1':
                 tx_recipient, tx_amount = self.get_transaction_info()
                 if self.blockchain.add_transaction(tx_recipient,
-                                                   self.node_id, tx_amount):
+                                                   self.wallet.public_key,
+                                                   tx_amount):
                     print('Transaction added.')
                 else:
                     print('Transaction failed.')
                 print(self.blockchain.get_open_transactions())
             elif user_choice == '2':
-                self.blockchain.mine_block()
+                if not self.blockchain.mine_block():
+                    print('Failed to mine new block. You do not have wallet.')
             elif user_choice == '3':
                 self.print_blockchain()
             elif user_choice == '4':
@@ -67,6 +83,12 @@ class Node:
                 else:
                     print('There is at least one invalid '
                           'transaction in open transactions.')
+            elif user_choice == '5':
+                self.create_wallet()
+            elif user_choice == '6':
+                self.load_wallet()
+            elif user_choice == '7':
+                self.wallet.save_keys_in_file()
             elif user_choice == 'q':
                 wait_for_input = False
             else:
@@ -79,5 +101,6 @@ class Node:
             self.print_balance()
 
 
-ui = Node()
-ui.listen_for_input()
+if __name__ == '__main__':
+    ui = Node()
+    ui.listen_for_input()
