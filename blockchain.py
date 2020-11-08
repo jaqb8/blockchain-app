@@ -3,6 +3,7 @@ from utils.hash_utils import hash_block
 from block import Block
 from transaction import Transaction
 from utils.validator import Validator
+from wallet import Wallet
 
 
 class Blockchain():
@@ -41,6 +42,7 @@ class Blockchain():
                     transactions=[Transaction(
                         sender=tx['sender'],
                         recipient=tx['recipient'],
+                        signature=tx['signature'],
                         amount=tx['amount']
                     ) for tx in block['transactions']],
                     timestamp=block['timestamp']
@@ -50,6 +52,7 @@ class Blockchain():
                 self.__open_transactions = [Transaction(
                     sender=tx['sender'],
                     recipient=tx['recipient'],
+                    signature=tx['signature'],
                     amount=tx['amount']
                 ) for tx in open_transactions]
         except (IOError, IndexError):
@@ -98,10 +101,10 @@ class Blockchain():
                                 for item in sublist])
         return recipient_amount - sender_amount
 
-    def add_transaction(self, recipient, sender, amount=1.0):
+    def add_transaction(self, recipient, sender, signature, amount=1.0):
         if self.hosting_node is None:
             return False
-        new_transaction = Transaction(sender, recipient, amount)
+        new_transaction = Transaction(sender, recipient, signature, amount)
         if Validator.verify_transaction(new_transaction,
                                         self.get_balance):
             self.__open_transactions.append(new_transaction)
@@ -128,8 +131,11 @@ class Blockchain():
         hashed_block = hash_block(last_block)
         proof = self.proof_of_work()
         reward_transaction = Transaction('MINING', self.hosting_node,
-                                         self.MINING_REWARD)
+                                         '', self.MINING_REWARD)
         open_transactions_copy = self.__open_transactions[:]
+        for tx in open_transactions_copy:
+            if not Wallet.verify_transaction(tx):
+                return False
         open_transactions_copy.append(reward_transaction)
         block = Block(
             index=len(self.__chain),

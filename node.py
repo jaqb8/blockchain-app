@@ -47,12 +47,24 @@ class Node:
         self.wallet.load_keys()
         self.initialize_blockchain(self.wallet.public_key)
 
+    def add_transaction(self):
+        tx_recipient, tx_amount = self.get_transaction_info()
+        signature = self.wallet.sign_transaction(self.wallet.public_key,
+                                                 tx_recipient, tx_amount)
+        if self.blockchain.add_transaction(tx_recipient,
+                                           self.wallet.public_key,
+                                           signature, tx_amount):
+            print('Transaction added.')
+        else:
+            print('Transaction failed')
+        print(self.blockchain.get_open_transactions())
+
     def listen_for_input(self):
         wait_for_input = True
 
         while wait_for_input:
             print('Please choose')
-            print('1: Add a new transaction value')
+            print('1: Add a new transaction')
             print('2: Mine a new block')
             print('3: Output the blockchain')
             print('4: Check transactions validity')
@@ -62,14 +74,7 @@ class Node:
             print('q: Quit')
             user_choice = self.get_user_choice()
             if user_choice == '1':
-                tx_recipient, tx_amount = self.get_transaction_info()
-                if self.blockchain.add_transaction(tx_recipient,
-                                                   self.wallet.public_key,
-                                                   tx_amount):
-                    print('Transaction added.')
-                else:
-                    print('Transaction failed.')
-                print(self.blockchain.get_open_transactions())
+                self.add_transaction()
             elif user_choice == '2':
                 if not self.blockchain.mine_block():
                     print('Failed to mine new block. You do not have wallet.')
