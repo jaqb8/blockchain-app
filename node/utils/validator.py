@@ -1,5 +1,5 @@
 from .hash_utils import hash_block, hash_string_sha256
-from wallet import Wallet
+from ..wallet import Wallet
 
 
 class Validator:

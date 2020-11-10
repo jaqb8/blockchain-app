@@ -1,5 +1,5 @@
 from time import time
-from utils.printable import Printable
+from .utils.printable import Printable
 
 
 class Block(Printable):

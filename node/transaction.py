@@ -1,5 +1,5 @@
 from collections import OrderedDict
-from utils.printable import Printable
+from .utils.printable import Printable
 
 
 class Transaction(Printable):

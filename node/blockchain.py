@@ -1,9 +1,10 @@
 import json
-from utils.hash_utils import hash_block
-from block import Block
-from transaction import Transaction
-from utils.validator import Validator
-from wallet import Wallet
+from .utils.hash_utils import hash_block
+from .block import Block
+from .transaction import Transaction
+from .utils.validator import Validator
+from .wallet import Wallet
+import os
 
 
 class Blockchain():
@@ -31,8 +32,9 @@ class Blockchain():
         return self.__open_transactions[:]
 
     def load_data(self):
+        print(os.getcwd())
         try:
-            with open('blockchain.txt', 'r') as input_file:
+            with open('./node/blockchain.txt', 'r') as input_file:
                 file_content = input_file.readlines()
                 blockchain = json.loads(file_content[0].strip('\n'))
                 self.chain = [Block(
@@ -60,7 +62,7 @@ class Blockchain():
 
     def save_data(self):
         try:
-            with open('blockchain.txt', 'w') as output_file:
+            with open('./node/blockchain.txt', 'w') as output_file:
                 parsed_chain = [block.__dict__
                                 for block in [
                                     Block(
