@@ -4,7 +4,6 @@ from .block import Block
 from .transaction import Transaction
 from .utils.validator import Validator
 from .wallet import Wallet
-import os
 
 
 class Blockchain():
@@ -32,7 +31,6 @@ class Blockchain():
         return self.__open_transactions[:]
 
     def load_data(self):
-        print(os.getcwd())
         try:
             with open('./node/blockchain.txt', 'r') as input_file:
                 file_content = input_file.readlines()
