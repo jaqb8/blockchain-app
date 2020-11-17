@@ -4,6 +4,7 @@ from .block import Block
 from .transaction import Transaction
 from .utils.validator import Validator
 from .wallet import Wallet
+import requests
 
 
 class Blockchain():
@@ -13,10 +14,12 @@ class Blockchain():
                           proof=100, transactions=None,
                           timestamp=0)
 
-    def __init__(self, hosting_node):
+    def __init__(self, public_key, node_id):
         self.chain = [self.GENESIS_BLOCK]
         self.__open_transactions = list()
-        self.hosting_node = hosting_node
+        self.public_key = public_key
+        self.__peer_nodes = set()
+        self.node_id = str(node_id)
         self.load_data()
 
     @property
@@ -32,7 +35,7 @@ class Blockchain():
 
     def load_data(self):
         try:
-            with open('./node/blockchain.txt', 'r') as input_file:
+            with open(f'./node/blockchain-{self.node_id}', 'r') as input_file:
                 file_content = input_file.readlines()
                 blockchain = json.loads(file_content[0].strip('\n'))
                 self.chain = [Block(
@@ -55,12 +58,13 @@ class Blockchain():
                     signature=tx['signature'],
                     amount=tx['amount']
                 ) for tx in open_transactions]
+                self.__peer_nodes = set(json.loads(file_content[2].strip('\n')))
         except (IOError, IndexError):
             print('Blockchain file not found.')
 
     def save_data(self):
         try:
-            with open('./node/blockchain.txt', 'w') as output_file:
+            with open(f'./node/blockchain-{self.node_id}', 'w') as output_file:
                 parsed_chain = [block.__dict__
                                 for block in [
                                     Block(
@@ -76,6 +80,8 @@ class Blockchain():
                 output_file.write('\n')
                 parsed_tx = [tx.__dict__ for tx in self.__open_transactions]
                 output_file.write(json.dumps(parsed_tx))
+                output_file.write('\n')
+                output_file.write(json.dumps(list(self.__peer_nodes)))
         except IOError:
             print('Saving failed!')
 
@@ -84,15 +90,22 @@ class Blockchain():
             return self.__chain[-1]
         raise Exception('Empty blockchain!')
 
-    def get_balance(self):
+    def get_balance(self, sender=None):
+        if sender is None:
+            if self.public_key is None:
+                raise Exception('Wallet is not set up.')
+            participant = self.public_key
+        else:
+            participant = sender
+
         tx_sender = [[tx.amount for tx in block.transactions
-                      if tx.sender == self.hosting_node]
+                      if tx.sender == participant]
                      for block in self.__chain]
         open_tx_sender = [tx.amount for tx in self.__open_transactions
-                          if tx.sender == self.hosting_node]
+                          if tx.sender == participant]
         tx_sender.append(open_tx_sender)
         tx_recipient = [[tx.amount for tx in block.transactions
-                         if tx.recipient == self.hosting_node]
+                         if tx.recipient == participant]
                         for block in self.__chain]
 
         sender_amount = sum([item for sublist in tx_sender
@@ -101,16 +114,35 @@ class Blockchain():
                                 for item in sublist])
         return recipient_amount - sender_amount
 
-    def add_transaction(self, recipient, sender, signature, amount=1.0):
-        if self.hosting_node is None:
-            return False
+    def add_transaction(self, recipient, sender, signature, amount=1.0, is_receiving=False):
+        if self.public_key is None:
+            raise Exception('Wallet is not set up.')
         new_transaction = Transaction(sender, recipient, signature, amount)
         if Validator.verify_transaction(new_transaction,
                                         self.get_balance):
             self.__open_transactions.append(new_transaction)
             self.save_data()
+
+            if not is_receiving:
+                for node in self.__peer_nodes:
+                    url = 'http://{}/api/broadcast-transaction'.format(node)
+                    try:
+                        response = requests.post(url, json={
+                            'sender': sender,
+                            'recipient': recipient,
+                            'amount': amount,
+                            'signature': signature
+                        })
+                        print(response)
+                        if response.status_code == 400 or response.status_code == 500:
+                            print('Transaction declined, needs resolving')
+                            raise Exception('Transaction declined, needs resolving')
+                    except requests.exceptions.ConnectionError:
+                        continue
+                    except Exception as err:
+                        print(err)
             return True
-        return False
+        raise Exception('Transaction is not valid.')
 
     def clear_open_transactions(self):
         self.__open_transactions = list()
@@ -125,17 +157,17 @@ class Blockchain():
         return proof
 
     def mine_block(self):
-        if self.hosting_node is None:
-            return False
+        if self.public_key is None:
+            raise Exception('Wallet is not set up.')
         last_block = self.get_last_blockchain_item()
         hashed_block = hash_block(last_block)
         proof = self.proof_of_work()
-        reward_transaction = Transaction('MINING', self.hosting_node,
+        reward_transaction = Transaction('MINING', self.public_key,
                                          '', self.MINING_REWARD)
         open_transactions_copy = self.__open_transactions[:]
         for tx in open_transactions_copy:
             if not Wallet.verify_transaction(tx):
-                return False
+                raise Exception('Transactions are not valid.')
         open_transactions_copy.append(reward_transaction)
         block = Block(
             index=len(self.__chain),
@@ -146,4 +178,15 @@ class Blockchain():
         self.__chain.append(block)
         self.clear_open_transactions()
         self.save_data()
-        return True
+        return block
+
+    def add_peer_node(self, node_url):
+        self.__peer_nodes.add(node_url)
+        self.save_data()
+
+    def remove_peer_node(self, node_url):
+        self.__peer_nodes.discard(node_url)
+        self.save_data()
+
+    def get_peer_nodes(self):
+        return list(self.__peer_nodes)

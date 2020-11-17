@@ -1,7 +1,7 @@
 from functools import wraps
-from blockchain import Blockchain
-from utils.validator import Validator
-from wallet import Wallet
+from .blockchain import Blockchain
+from .utils.validator import Validator
+from .wallet import Wallet
 
 
 class Node:
