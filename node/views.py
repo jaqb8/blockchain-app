@@ -95,12 +95,12 @@ def broadcast_transaction(request):
             'msg': 'Required data is missing.'
         }, status=status.HTTP_400_BAD_REQUEST)
 
-    try:
-        blockchain.add_transaction(request_body['recipient'],
-                                   request_body['sender'],
-                                   request_body['signature'],
-                                   request_body['amount'],
-                                   is_receiving=True)
+    success = blockchain.add_transaction(request_body['recipient'],
+                                         request_body['sender'],
+                                         request_body['signature'],
+                                         request_body['amount'],
+                                         is_receiving=True)
+    if success:
         return Response({
             'msg': 'Transaction added successfully.',
             'transaction': {
@@ -110,14 +110,46 @@ def broadcast_transaction(request):
                 'amount': request_body['amount']
             }
         }, status=status.HTTP_201_CREATED)
-    except Exception as err_msg:
+    else:
         return Response({
-            'msg': str(err_msg)
+            'msg': 'Creating transaction failed.'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['POST'])
+def broadcast_block(request):
+    request_body = request.data
+    if not request_body or 'block' not in request_body:
+        return Response({
+            'msg': 'Required data is missing.'
+        }, status=status.HTTP_400_BAD_REQUEST)
+    block = request_body['block']
+    if block['index'] == blockchain.chain[-1].index + 1:
+        if blockchain.add_block(block):
+            return Response({
+                'msg': 'Block added'
+            }, status=status.HTTP_201_CREATED)
+        else:
+            return Response({
+                'msg': 'Block seems invalid.'
+            }, status=status.HTTP_409_CONFLICT)
+    elif block['index'] > blockchain.chain[-1].index:
+        blockchain.resolve_confilcts = True
+        return Response({
+            'msg': 'Blockchain seems to differ from local one, block not added.'
+        })
+    else:
+        return Response({
+            'msg': 'Blockchain seems to be shorter, block not added.'
+        }, status=status.HTTP_409_CONFLICT)
+
+
+@api_view(['POST'])
 def mine(request):
+    if blockchain.resolve_confilcts:
+        return Response({
+            'msg': 'Resolve conflicts first, block not added.'
+        }, status=status.HTTP_409_CONFLICT)
     try:
         block = blockchain.mine_block()
         json_block = block.__dict__.copy()
@@ -133,6 +165,19 @@ def mine(request):
             'msg': str(err_msg),
             'wallet_set_up': wallet.public_key is not None
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['POST'])
+def resolve_conflicts(request):
+    is_chain_replaced = blockchain.resolve()
+    if is_chain_replaced:
+        return Response({
+            'msg': 'Blockchain replaced.'
+        })
+    else:
+        return Response({
+            'msg': 'Local blockchain kept.'
+        })
 
 
 @api_view()

@@ -20,6 +20,7 @@ class Blockchain():
         self.public_key = public_key
         self.__peer_nodes = set()
         self.node_id = str(node_id)
+        self.resolve_confilcts = False
         self.load_data()
 
     @property
@@ -133,16 +134,13 @@ class Blockchain():
                             'amount': amount,
                             'signature': signature
                         })
-                        print(response)
                         if response.status_code == 400 or response.status_code == 500:
                             print('Transaction declined, needs resolving')
-                            raise Exception('Transaction declined, needs resolving')
+                            return False
                     except requests.exceptions.ConnectionError:
                         continue
-                    except Exception as err:
-                        print(err)
             return True
-        raise Exception('Transaction is not valid.')
+        raise False
 
     def clear_open_transactions(self):
         self.__open_transactions = list()
@@ -178,7 +176,88 @@ class Blockchain():
         self.__chain.append(block)
         self.clear_open_transactions()
         self.save_data()
+        for node in self.__peer_nodes:
+            url = 'http://{}/api/broadcast-block'.format(node)
+            dict_block = block.__dict__.copy()
+            dict_block['transactions'] = [tx.__dict__
+                                          for tx in dict_block['transactions']]
+            try:
+                response = requests.post(url, json={
+                    'block': dict_block
+                })
+                if response.status_code == 400 or response.status_code == 500:
+                    print('Block declined, needs resolving')
+                if response.status_code == 409:
+                    self.resolve_confilcts = True
+            except requests.exceptions.ConnectionError:
+                continue
         return block
+
+    def add_block(self, block):
+        transactions = [Transaction(tx['sender'],
+                                    tx['recipient'],
+                                    tx['signature'],
+                                    tx['amount']) for tx in block['transactions']]
+        proof_is_valid = Validator.valid_proof(transactions[:-1],
+                                               block['previous_hash'],
+                                               block['proof'])
+        hashes_match = hash_block(self.chain[-1]) == block['previous_hash']
+        if not proof_is_valid or not hashes_match:
+            return False
+        block_object = Block(block['index'],
+                             block['previous_hash'],
+                             block['proof'],
+                             transactions,
+                             block['timestamp'])
+        self.__chain.append(block_object)
+        stored_transactions = self.__open_transactions[:]
+        for incoming_tx in block['transactions']:
+            for open_tx in stored_transactions:
+                if open_tx.sender == incoming_tx['sender'] \
+                        and open_tx.recipient == incoming_tx['recipient'] \
+                        and open_tx.signature == incoming_tx['signature'] \
+                        and open_tx.amount == incoming_tx['amount']:
+                    try:
+                        self.__open_transactions.remove(open_tx)
+                    except ValueError:
+                        print('Item was already removed.')
+        self.save_data()
+        return True
+
+    @staticmethod
+    def parse_chain_to_objects(chain):
+        parsed_chain = [Block(block['index'],
+                              block['previous_hash'],
+                              block['proof'],
+                              [Transaction(tx['sender'],
+                                           tx['recipient'],
+                                           tx['signature'],
+                                           tx['amount'])
+                               for tx in block['transactions']],
+                              block['timestamp']) for block in chain]
+        return parsed_chain
+
+    def resolve(self):
+        winner_chain = self.chain
+        is_chain_replaced = False
+        for node in self.__peer_nodes:
+            url = 'http://{}/api/chain'.format(node)
+            try:
+                response = requests.get(url)
+                node_chain = response.json()
+                node_chain = self.parse_chain_to_objects(node_chain)
+                if len(node_chain) > len(winner_chain) \
+                        and Validator.verify_chain(node_chain):
+                    winner_chain = node_chain
+                    is_chain_replaced = True
+            except requests.exceptions.ConnectionError:
+                continue
+        self.resolve_confilcts = False
+        self.chain = winner_chain
+        if is_chain_replaced:
+            self.clear_open_transactions()
+        self.save_data()
+        return is_chain_replaced
 
     def add_peer_node(self, node_url):
         self.__peer_nodes.add(node_url)
